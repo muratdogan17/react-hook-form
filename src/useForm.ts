@@ -952,9 +952,9 @@ export function useForm<
     [
       isOnSubmit,
       reRender,
-      removeFieldEventListenerAndRef,
       setFieldValue,
       shouldValidateSchemaOrResolver,
+      removeFieldEventListenerAndRef,
       validateAllFieldCriteria,
       validateSchemaOrResolver,
     ],
