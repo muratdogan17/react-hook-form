@@ -661,41 +661,44 @@ export function useForm<
     reRender();
   }
 
-  const setInternalError = ({
-    name,
-    type,
-    types,
-    message,
-    shouldRender,
-  }: {
-    name: FieldName<FormValues>;
-    type: string;
-    types?: MultipleFieldErrors;
-    message?: Message;
-    shouldRender?: boolean;
-  }) => {
-    const field = fieldsRef.current[name];
+  const setInternalError = React.useCallback(
+    ({
+      name,
+      type,
+      types,
+      message,
+      shouldRender,
+    }: {
+      name: FieldName<FormValues>;
+      type: string;
+      types?: MultipleFieldErrors;
+      message?: Message;
+      shouldRender?: boolean;
+    }) => {
+      const field = fieldsRef.current[name];
 
-    if (
-      !isSameError(get(errorsRef.current, name) as FieldError, {
-        type,
-        message,
-        types,
-      })
-    ) {
-      set(errorsRef.current, name, {
-        type,
-        types,
-        message,
-        ref: field ? field.ref : {},
-        isManual: true,
-      });
+      if (
+        !isSameError(get(errorsRef.current, name) as FieldError, {
+          type,
+          message,
+          types,
+        })
+      ) {
+        set(errorsRef.current, name, {
+          type,
+          types,
+          message,
+          ref: field ? field.ref : {},
+          isManual: true,
+        });
 
-      if (shouldRender) {
-        reRender();
+        if (shouldRender) {
+          reRender();
+        }
       }
-    }
-  };
+    },
+    [reRender],
+  );
 
   function setError(
     name: IsFlatObject<FormValues> extends true
@@ -823,126 +826,139 @@ export function useForm<
     }
   }
 
-  function registerFieldsRef<Element extends FieldElement<FormValues>>(
-    ref: Element,
-    validateOptions: ValidationOptions | null = {},
-  ): ((name: FieldName<FormValues>) => void) | void {
-    if (!ref.name) {
-      // eslint-disable-next-line no-console
-      return console.warn('Missing name @', ref);
-    }
+  const registerFieldsRef = React.useCallback(
+    <Element extends FieldElement<FormValues>>(
+      ref: Element,
+      validateOptions: ValidationOptions | null = {},
+    ): ((name: FieldName<FormValues>) => void) | void => {
+      if (!ref.name) {
+        // eslint-disable-next-line no-console
+        return console.warn('Missing name @', ref);
+      }
 
-    const { name, type, value } = ref;
-    const fieldRefAndValidationOptions = {
-      ref,
-      ...validateOptions,
-    };
-    const fields = fieldsRef.current;
-    const isRadioOrCheckbox = isRadioOrCheckboxFunction(ref);
-    let field = fields[name] as Field;
-    let isEmptyDefaultValue = true;
-    let isFieldArray;
-    let defaultValue;
-
-    if (
-      isRadioOrCheckbox
-        ? field &&
-          isArray(field.options) &&
-          field.options.filter(Boolean).find((option) => {
-            return value === option.ref.value && option.ref === ref;
-          })
-        : field && ref === field.ref
-    ) {
-      fields[name as FieldName<FormValues>] = {
-        ...field,
+      const { name, type, value } = ref;
+      const fieldRefAndValidationOptions = {
+        ref,
         ...validateOptions,
       };
-      return;
-    }
+      const fields = fieldsRef.current;
+      const isRadioOrCheckbox = isRadioOrCheckboxFunction(ref);
+      let field = fields[name] as Field;
+      let isEmptyDefaultValue = true;
+      let isFieldArray;
+      let defaultValue;
 
-    if (type) {
-      const mutationWatcher = onDomRemove(ref, () =>
-        removeFieldEventListenerAndRef(field),
-      );
-
-      field = isRadioOrCheckbox
-        ? {
-            options: [
-              ...((field && field.options) || []),
-              {
-                ref,
-                mutationWatcher,
-              } as RadioOrCheckboxOption,
-            ],
-            ref: { type, name },
-            ...validateOptions,
-          }
-        : {
-            ...fieldRefAndValidationOptions,
-            mutationWatcher,
-          };
-    } else {
-      field = fieldRefAndValidationOptions;
-    }
-
-    fields[name as FieldName<FormValues>] = field;
-
-    if (!isEmptyObject(defaultValuesRef.current)) {
-      defaultValue = get(defaultValuesRef.current, name);
-      isEmptyDefaultValue = isUndefined(defaultValue);
-      isFieldArray = isNameInFieldArray(fieldArrayNamesRef.current, name);
-
-      if (!isEmptyDefaultValue && !isFieldArray) {
-        setFieldValue(field, defaultValue);
+      if (
+        isRadioOrCheckbox
+          ? field &&
+            isArray(field.options) &&
+            field.options.filter(Boolean).find((option) => {
+              return value === option.ref.value && option.ref === ref;
+            })
+          : field && ref === field.ref
+      ) {
+        fields[name as FieldName<FormValues>] = {
+          ...field,
+          ...validateOptions,
+        };
+        return;
       }
-    }
 
-    if (
-      shouldValidateSchemaOrResolver &&
-      !isFieldArray &&
-      readFormStateRef.current.isValid
-    ) {
-      validateSchemaOrResolver();
-    } else if (!isEmptyObject(validateOptions)) {
-      fieldsWithValidationRef.current.add(name);
-
-      if (!isOnSubmit && readFormStateRef.current.isValid) {
-        validateField(fieldsRef, validateAllFieldCriteria, field).then(
-          (error) => {
-            const previousFormIsValid = isValidRef.current;
-
-            isEmptyObject(error)
-              ? validFieldsRef.current.add(name)
-              : (isValidRef.current = false);
-
-            if (previousFormIsValid !== isValidRef.current) {
-              reRender();
-            }
-          },
+      if (type) {
+        const mutationWatcher = onDomRemove(ref, () =>
+          removeFieldEventListenerAndRef(field),
         );
+
+        field = isRadioOrCheckbox
+          ? {
+              options: [
+                ...((field && field.options) || []),
+                {
+                  ref,
+                  mutationWatcher,
+                } as RadioOrCheckboxOption,
+              ],
+              ref: { type, name },
+              ...validateOptions,
+            }
+          : {
+              ...fieldRefAndValidationOptions,
+              mutationWatcher,
+            };
+      } else {
+        field = fieldRefAndValidationOptions;
       }
-    }
 
-    if (
-      !defaultValuesAtRenderRef.current[name] &&
-      !(isFieldArray && isEmptyDefaultValue)
-    ) {
-      defaultValuesAtRenderRef.current[
-        name as FieldName<FormValues>
-      ] = isEmptyDefaultValue ? getFieldValue(fields, field.ref) : defaultValue;
-    }
+      fields[name as FieldName<FormValues>] = field;
 
-    if (type) {
-      attachEventListeners({
-        field:
-          isRadioOrCheckbox && field.options
-            ? field.options[field.options.length - 1]
-            : field,
-        isRadioOrCheckbox: isRadioOrCheckbox || isSelectInput(ref),
-        handleChange: handleChangeRef.current,
-      });
-    }
-  }
+      if (!isEmptyObject(defaultValuesRef.current)) {
+        defaultValue = get(defaultValuesRef.current, name);
+        isEmptyDefaultValue = isUndefined(defaultValue);
+        isFieldArray = isNameInFieldArray(fieldArrayNamesRef.current, name);
+
+        if (!isEmptyDefaultValue && !isFieldArray) {
+          setFieldValue(field, defaultValue);
+        }
+      }
+
+      if (
+        shouldValidateSchemaOrResolver &&
+        !isFieldArray &&
+        readFormStateRef.current.isValid
+      ) {
+        validateSchemaOrResolver();
+      } else if (!isEmptyObject(validateOptions)) {
+        fieldsWithValidationRef.current.add(name);
+
+        if (!isOnSubmit && readFormStateRef.current.isValid) {
+          validateField(fieldsRef, validateAllFieldCriteria, field).then(
+            (error) => {
+              const previousFormIsValid = isValidRef.current;
+
+              isEmptyObject(error)
+                ? validFieldsRef.current.add(name)
+                : (isValidRef.current = false);
+
+              if (previousFormIsValid !== isValidRef.current) {
+                reRender();
+              }
+            },
+          );
+        }
+      }
+
+      if (
+        !defaultValuesAtRenderRef.current[name] &&
+        !(isFieldArray && isEmptyDefaultValue)
+      ) {
+        defaultValuesAtRenderRef.current[
+          name as FieldName<FormValues>
+        ] = isEmptyDefaultValue
+          ? getFieldValue(fields, field.ref)
+          : defaultValue;
+      }
+
+      if (type) {
+        attachEventListeners({
+          field:
+            isRadioOrCheckbox && field.options
+              ? field.options[field.options.length - 1]
+              : field,
+          isRadioOrCheckbox: isRadioOrCheckbox || isSelectInput(ref),
+          handleChange: handleChangeRef.current,
+        });
+      }
+    },
+    [
+      isOnSubmit,
+      reRender,
+      removeFieldEventListenerAndRef,
+      setFieldValue,
+      shouldValidateSchemaOrResolver,
+      validateAllFieldCriteria,
+      validateSchemaOrResolver,
+    ],
+  );
 
   function register<
     Element extends FieldElement<FormValues> = FieldElement<FormValues>
@@ -1223,10 +1239,10 @@ export function useForm<
       triggerValidation,
     ]),
     register: React.useCallback(register, [
-      defaultValuesRef.current,
-      defaultValuesAtRenderRef.current,
+      isWindowUndefined,
+      registerFieldsRef,
     ]),
-    unregister: React.useCallback(unregister, []),
+    unregister: React.useCallback(unregister, [removeFieldEventListenerAndRef]),
     getValues: React.useCallback(getValues, []),
     formState: isProxyEnabled
       ? new Proxy<FormStateProxy<FormValues>>(formState, {
